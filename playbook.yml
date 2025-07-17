@@ -1,0 +1,144 @@
+---
+- name: Install Python, Flask and deploy app.py
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install Python3 and pip
+      package:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install Flask and dependencies using pip
+      pip:
+        name:
+          - flask
+          - psycopg2-binary
+          - azure-identity
+          - azure-storage-blob
+        state: present
+
+    - name: Create directory for application
+      file:
+        path: /opt/flask_app
+        state: directory
+        mode: '0755'
+
+    - name: Copy app.py to remote server
+      copy:
+        src: app.py
+        dest: /opt/flask_app/app.py
+        mode: '0644'
+
+    - name: Create systemd service file for Flask app
+      copy:
+        content: |
+          [Unit]
+          Description=Flask Application
+          After=network.target
+
+          [Service]
+          Type=simple
+          # Exécuter en tant que root pour éviter les problèmes de permissions
+          User=root
+          Group=root
+          WorkingDirectory=/opt/flask_app
+          Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+          ExecStart=/usr/bin/python3 -u /opt/flask_app/app.py
+          Restart=always
+          RestartSec=5
+          StandardOutput=journal
+          StandardError=journal
+          SyslogIdentifier=flask-app
+          # Ajouter des options pour le débogage
+          TimeoutStartSec=0
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/flask-app.service
+        mode: '0644'
+
+    - name: Change ownership of flask app directory to match service user
+      file:
+        path: /opt/flask_app
+        owner: root
+        group: root
+        recurse: yes
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Flask application service
+      systemd:
+        name: flask-app
+        enabled: yes
+        state: started
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Disable UFW to ensure it doesn't block connections
+      ufw:
+        state: disabled
+      when: ansible_os_family == "Debian"
+
+    - name: Check if SELinux is installed
+      command: which selinuxenabled
+      register: selinux_check
+      failed_when: false
+      changed_when: false
+
+    - name: Set SELinux to permissive if installed
+      command: setenforce 0
+      when: selinux_check.rc == 0
+      failed_when: false
+      changed_when: false
+
+    - name: Install netstat for debugging
+      apt:
+        name: net-tools
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Check if Flask service is running
+      command: systemctl status flask-app
+      register: service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display Flask service status
+      debug:
+        var: service_status.stdout_lines
+
+    - name: Check listening ports
+      command: netstat -tulpn
+      register: netstat_output
+      changed_when: false
+
+    - name: Display listening ports
+      debug:
+        var: netstat_output.stdout_lines
+
+    - name: Restart Flask service
+      systemd:
+        name: flask-app
+        state: restarted
+
+    - name: Ensure Flask is accessible
+      wait_for:
+        port: 5000
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    // Ajouter configuration d'env vars si nécessaire, mais pour demo, hardcodé dans app.py

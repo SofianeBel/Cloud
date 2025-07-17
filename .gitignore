@@ -1,0 +1,11 @@
+# Terraform files
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Executables and archives
+terraform.exe
+terraform.zip
+
+# Other temporary files
+*.backup
