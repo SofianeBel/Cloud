@@ -348,18 +348,3 @@ tar -czf app_backup_$(date +%Y%m%d).tar.gz /home/azureuser/app/
    sudo apt update && sudo apt upgrade -y
    sudo systemctl restart todolist
    ```
-
----
-
-## 📞 Support
-
-En cas de problème :
-
-1. 📖 Consultez les logs détaillés
-2. 🔍 Vérifiez la documentation Azure
-3. 🛠️ Utilisez les commandes de dépannage ci-dessus
-4. 📧 Contactez l'équipe de support
-
----
-
-**✅ Votre application TodoList est maintenant déployée et prête à l'emploi !**
