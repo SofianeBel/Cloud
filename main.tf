@@ -163,9 +163,7 @@ resource "azurerm_linux_virtual_machine" "vm" {
       ansible-playbook -i inventory.ini playbook.yml -v
     EOT
   }
-  identity {
-    type = "SystemAssigned"
-  }
+  # Identité managée supprimée pour simplifier l'accès au stockage
 }
 
 // Ajout du compte de stockage
@@ -187,40 +185,57 @@ resource "azurerm_storage_container" "container" {
   container_access_type = "private"
 }
 
-// Rôle pour accès au stockage
-resource "azurerm_role_assignment" "storage_role" {
-  scope                = azurerm_storage_account.storage.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = azurerm_linux_virtual_machine.vm.identity[0].principal_id
-}
 
-// Ajout de la base de données PostgreSQL
-resource "azurerm_postgresql_server" "db_server" {
+
+
+
+// Accès au stockage via clés d'accès (plus simple pour le projet)
+// Les clés seront disponibles dans les outputs pour l'application Flask
+
+// Ajout de la base de données PostgreSQL Flexible Server
+resource "azurerm_postgresql_flexible_server" "db_server" {
   name                = var.db_server_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
-  sku_name = "B_Gen5_1"
-
-  storage_mb                   = 5120
-  backup_retention_days        = 7
+  sku_name   = "B_Standard_B1ms"
+  version    = "13"
+  
+  storage_mb = 32768
+  
+  backup_retention_days = 7
   geo_redundant_backup_enabled = false
-  auto_grow_enabled            = true
 
-  administrator_login          = var.db_admin_login
-  administrator_login_password = var.db_admin_password
-  version                      = "11"
-  ssl_enforcement_enabled      = true
+  administrator_login    = var.db_admin_login
+  administrator_password = var.db_admin_password
+
+  tags = {
+    environment = "dev"
+  }
 }
 
-resource "azurerm_postgresql_database" "db" {
-  name                = var.db_name
-  resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_postgresql_server.db_server.name
-  charset             = "UTF8"
-  collation           = "English_United States.1252"
+resource "azurerm_postgresql_flexible_server_database" "db" {
+  name      = var.db_name
+  server_id = azurerm_postgresql_flexible_server.db_server.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
 }
 
-// Rôle pour accès à la base de données (si nécessaire, mais pour PostgreSQL, utiliser connexion directe avec creds)
-// Note: Pour sécurité, les creds seront gérés séparément.
+// Règle de pare-feu pour permettre l'accès depuis la VM
+resource "azurerm_postgresql_flexible_server_firewall_rule" "vm_access" {
+  name             = "AllowVMAccess"
+  server_id        = azurerm_postgresql_flexible_server.db_server.id
+  start_ip_address = azurerm_public_ip.public_ip.ip_address
+  end_ip_address   = azurerm_public_ip.public_ip.ip_address
+}
+
+// Règle de pare-feu pour permettre l'accès depuis Azure services (optionnel)
+resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
+  name             = "AllowAzureServices"
+  server_id        = azurerm_postgresql_flexible_server.db_server.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+
+// Note: Pour sécurité, les creds seront gérés via variables Terraform
 

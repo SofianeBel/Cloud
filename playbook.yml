@@ -20,7 +20,6 @@
         name:
           - flask
           - psycopg2-binary
-          - azure-identity
           - azure-storage-blob
         state: present
 
@@ -30,34 +29,53 @@
         state: directory
         mode: '0755'
 
-    - name: Copy app.py to remote server
+    - name: Copy application files to remote server
       copy:
-        src: app.py
-        dest: /opt/flask_app/app.py
+        src: "{{ item }}"
+        dest: "/opt/flask_app/{{ item }}"
         mode: '0644'
+      loop:
+        - app.py
+        - requirements.txt
+
+    - name: Create environment file for Flask app
+      copy:
+        content: |
+          # Configuration de l'application Flask
+          DB_HOST={{ db_host | default('localhost') }}
+          DB_NAME={{ db_name | default('sbeldb') }}
+          DB_USER={{ db_user | default('dbadmin') }}
+          DB_PASS={{ db_pass | default('SecurePass123!') }}
+          STORAGE_ACCOUNT_NAME={{ storage_account_name | default('sbelstorage') }}
+          STORAGE_ACCOUNT_KEY={{ storage_account_key | default('') }}
+          CONTAINER_NAME={{ container_name | default('staticfiles') }}
+          FLASK_ENV=production
+        dest: /opt/flask_app/.env
+        mode: '0600'
+        owner: root
+        group: root
 
     - name: Create systemd service file for Flask app
       copy:
         content: |
           [Unit]
-          Description=Flask Application
+          Description=Flask Application - Démo Cloud
           After=network.target
 
           [Service]
           Type=simple
-          # Exécuter en tant que root pour éviter les problèmes de permissions
           User=root
           Group=root
           WorkingDirectory=/opt/flask_app
           Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+          EnvironmentFile=/opt/flask_app/.env
           ExecStart=/usr/bin/python3 -u /opt/flask_app/app.py
           Restart=always
-          RestartSec=5
+          RestartSec=10
           StandardOutput=journal
           StandardError=journal
           SyslogIdentifier=flask-app
-          # Ajouter des options pour le débogage
-          TimeoutStartSec=0
+          TimeoutStartSec=30
 
           [Install]
           WantedBy=multi-user.target
@@ -141,4 +159,47 @@
         timeout: 30
         state: started
 
-    // Ajouter configuration d'env vars si nécessaire, mais pour demo, hardcodé dans app.py
+    - name: Copy sample data script
+      copy:
+        src: sample_data.sql
+        dest: /opt/flask_app/sample_data.sql
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Wait for application to be ready
+      wait_for:
+        port: 5000
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 60
+
+    - name: Verify application is accessible
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:5000/health"
+        method: GET
+        timeout: 30
+      register: health_check
+      retries: 5
+      delay: 10
+      until: health_check.status == 200
+
+    - name: Load sample data (optional)
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        query: "{{ lookup('file', '/opt/flask_app/sample_data.sql') }}"
+      ignore_errors: yes
+      tags: sample_data
+
+    - name: Display application access information
+      debug:
+        msg:
+          - "🚀 Application Flask déployée avec succès!"
+          - "📍 Accès: http://{{ ansible_default_ipv4.address }}:5000"
+          - "📊 Monitoring: http://{{ ansible_default_ipv4.address }}:5000/health"
+          - "📁 API Files: http://{{ ansible_default_ipv4.address }}:5000/files"
+          - "☁️  Test Storage: http://{{ ansible_default_ipv4.address }}:5000/test-storage"
+          - "📋 Logs: sudo journalctl -u flask-app -f"
