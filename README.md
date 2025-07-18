@@ -148,17 +148,6 @@ CONTAINER_NAME=staticfiles
 - Clés SSH pour l'authentification
 - Variables d'environnement pour les secrets
 
-## 🚀 Améliorations Futures
-
-- [ ] Authentification utilisateur avec Azure AD
-- [ ] Upload de fichiers attachés aux tâches
-- [ ] Notifications par email
-- [ ] API GraphQL
-- [ ] Mode sombre/clair
-- [ ] Collaboration en équipe
-- [ ] Intégration calendrier
-- [ ] Rapports et analytics
-
 ## 📋 Étapes d'Utilisation
 
 1. **Configurer l'authentification Azure** : `az login`
@@ -168,7 +157,3 @@ CONTAINER_NAME=staticfiles
 5. **Tester les fonctionnalités** : créer, modifier, supprimer des tâches
 6. **Vérifier les intégrations** : base de données et stockage Azure
 7. **Nettoyer les ressources** : `wsl terraform destroy`
-
----
-
-**Développé avec ❤️ pour démontrer les capacités de déploiement automatisé sur Azure**
